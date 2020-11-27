@@ -371,6 +371,7 @@ class DocxDocument {
     return this.lastNumberingId;
   }
 
+
   createMediaFile(base64String) {
     // eslint-disable-next-line no-useless-escape
     const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
@@ -380,15 +381,26 @@ class DocxDocument {
 
     const base64FileContent = matches[2];
     // matches array contains file type in base64 format - image/jpeg and base64 stringified data
-    const fileExtension =
+    let fileExtension =
       matches[1].match(/\/(.*?)$/)[1] === 'octet-stream' ? 'png' : matches[1].match(/\/(.*?)$/)[1];
+    if (fileExtension.indexOf('svg') !== -1) {
+      fileExtension = 'svg';
+    }
+
     const SHA1String = crypto.createHash('sha1').update(crypto.randomBytes(20)).digest('hex');
 
-    const fileNameWithExtension = `image-${SHA1String}.${fileExtension}`;
-
+    const files = [];
+    let fileNameWithExtension = `image-${SHA1String}.${fileExtension}`;
     this.lastMediaId += 1;
 
-    return { id: this.lastMediaId, fileContent: base64FileContent, fileNameWithExtension };
+    files.push({id: this.lastMediaId, fileContent: base64FileContent, fileNameWithExtension});
+
+    if (fileExtension === 'svg') {
+      fileNameWithExtension = `image-${SHA1String}.png`;
+      files.push({id: this.lastMediaId, fileContent: base64FileContent, fileNameWithExtension});
+      this.lastMediaId += 1;
+    }
+    return files;
   }
 
   createDocumentRelationships(fileName = 'document', type, target, targetMode = 'External') {

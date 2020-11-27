@@ -13,54 +13,143 @@ const isVNode = require('virtual-dom/vnode/is-vnode');
 const isVText = require('virtual-dom/vnode/is-vtext');
 const escape = require('escape-html');
 const sizeOf = require('image-size');
+const { createCanvas, Image, //loadImage
+} = require('canvas');
 
 const convertHTML = require('html-to-vdom')({
   VNode,
   VText,
 });
 
+const  createMediaFileFromSvg = (base64String, width, height, callback) => {
+  const canvas = createCanvas(200, 200);
+  const context = canvas.getContext('2d')
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const image = new Image();
+  image.onload = function() {
+    context.clearRect ( 0, 0, width, height );
+    context.drawImage(image, 0, 0, width, height);
+    const pngData = canvas.toDataURL('image/' + 'png');
+    callback(pngData);
+  };
+  image.src = "data:image/svg+xml;base64," + base64String;
+};
+
 // eslint-disable-next-line consistent-return
 export const buildImage = (docxDocumentInstance, vNode, maximumWidth = null) => {
   let response = null;
+  let responseArr = [];
   try {
     // libtidy encodes the image src
-    response = docxDocumentInstance.createMediaFile(decodeURIComponent(vNode.properties.src));
+    responseArr = docxDocumentInstance.createMediaFile(decodeURIComponent(vNode.properties.src));
   } catch (error) {
     // NOOP
   }
-  if (response) {
-    docxDocumentInstance.zip
-      .folder('word')
-      .folder('media')
-      .file(response.fileNameWithExtension, Buffer.from(response.fileContent, 'base64'), {
-        createFolders: false,
-      });
 
-    const documentRelsId = docxDocumentInstance.createDocumentRelationships(
-      docxDocumentInstance.relationshipFilename,
-      'image',
-      `media/${response.fileNameWithExtension}`,
-      'Internal'
-    );
 
-    const imageBuffer = Buffer.from(response.fileContent, 'base64');
-    const imageProperties = sizeOf(imageBuffer);
+  if (responseArr && responseArr.length) {
+    if (responseArr.length === 1) {
+      response = responseArr[0];
+      docxDocumentInstance.zip
+        .folder('word')
+        .folder('media')
+        .file(response.fileNameWithExtension, Buffer.from(response.fileContent, 'base64'), {
+          createFolders: false,
+        });
+      let documentRelsId = docxDocumentInstance.createDocumentRelationships(
+        docxDocumentInstance.relationshipFilename,
+        'image',
+        `media/${response.fileNameWithExtension}`,
+        'Internal'
+      );
+      const imageBuffer = Buffer.from(response.fileContent, 'base64');
+      const imageProperties = sizeOf(imageBuffer);
+      let imageFragment = xmlBuilder.buildParagraph(
+        vNode,
+        {
+          type: 'picture',
+          inlineOrAnchored: true,
+          relationshipId: documentRelsId,
+          ...response,
+          maximumWidth: maximumWidth || docxDocumentInstance.availableDocumentSpace,
+          originalWidth: imageProperties.width,
+          originalHeight: imageProperties.height,
+        },
+        docxDocumentInstance
+      );
+      return imageFragment;
+    }
+    else {
+      // For svg
+      // const relationshipIds = [];
 
-    const imageFragment = xmlBuilder.buildParagraph(
-      vNode,
-      {
-        type: 'picture',
-        inlineOrAnchored: true,
-        relationshipId: documentRelsId,
-        ...response,
-        maximumWidth: maximumWidth || docxDocumentInstance.availableDocumentSpace,
-        originalWidth: imageProperties.width,
-        originalHeight: imageProperties.height,
-      },
-      docxDocumentInstance
-    );
+      let ownerImageProperties;
+      let ownerRelationshipId;
+      let ownerResponse;
+      let relationshipId_png;
+      for (let i = 0; i < responseArr.length; i++) {
+        response = responseArr[i];
+        const imageBuffer = Buffer.from(response.fileContent, 'base64');
+        const imageProperties = sizeOf(imageBuffer);
 
-    return imageFragment;
+        if (i === 0) {
+          ownerImageProperties = imageProperties;
+          docxDocumentInstance.zip
+            .folder('word')
+            .folder('media')
+            .file(response.fileNameWithExtension, Buffer.from(response.fileContent, 'base64'), {
+              createFolders: false,
+            });
+        } else {
+          createMediaFileFromSvg(response.fileContent, imageProperties.width, imageProperties.height,
+            (pngData) => {
+              const index = pngData.indexOf('data:image/png;base64,');
+              if ( index >= 0 ) {
+                pngData = pngData.slice(index + 'data:image/png;base64,'.length);
+              }
+              docxDocumentInstance.zip
+                .folder('word')
+                .folder('media')
+                .file(response.fileNameWithExtension, Buffer.from(pngData, 'base64'), {
+                  createFolders: false,
+                });
+            });
+        }
+
+        let documentRelsId = docxDocumentInstance.createDocumentRelationships(
+          docxDocumentInstance.relationshipFilename,
+          'image',
+          `media/${response.fileNameWithExtension}`,
+          'Internal'
+        );
+        if (i === 0) {
+          ownerRelationshipId = documentRelsId;
+          ownerResponse = response;
+        } else {
+          relationshipId_png = documentRelsId;
+        }
+      }
+
+      let imageFragment = xmlBuilder.buildParagraph(
+        vNode,
+        {
+          type: 'picture_svg',
+          inlineOrAnchored: true,
+          relationshipId: relationshipId_png,
+          relationshipId_png: relationshipId_png,
+          relationshipId_svg: ownerRelationshipId,
+          ...ownerResponse,
+          maximumWidth: maximumWidth || docxDocumentInstance.availableDocumentSpace,
+          originalWidth: ownerImageProperties.width,
+          originalHeight: ownerImageProperties.height,
+        },
+        docxDocumentInstance
+      );
+      return imageFragment;
+    }
   }
 };
 
@@ -161,7 +250,6 @@ function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     xmlFragment.import(paragraphFragment);
     return;
   }
-
   switch (vNode.tagName) {
     case 'h1':
     case 'h2':
@@ -192,9 +280,22 @@ function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'sub':
     case 'sup':
     case 'mark':
+    case 'div':
     case 'p':
       const paragraphFragment = xmlBuilder.buildParagraph(vNode, {}, docxDocumentInstance);
       xmlFragment.import(paragraphFragment);
+      return;
+    case 'math':
+      const mathFragment = fragment({
+        namespaceAlias: { w: namespaces.w },
+      })
+        .ele('@w', 'p');
+
+      const oMathPara = xmlBuilder.buildMathPara(vNode, {}, docxDocumentInstance);
+      mathFragment.import(oMathPara);
+      mathFragment.up();
+
+      xmlFragment.import(mathFragment);
       return;
     case 'figure':
       if (vNode.children && Array.isArray(vNode.children) && vNode.children.length) {

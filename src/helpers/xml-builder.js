@@ -372,7 +372,7 @@ const buildRun = (vNode, attributes) => {
   if (isVText(vNode)) {
     const textFragment = buildTextElement(vNode.text);
     runFragment.import(textFragment);
-  } else if (attributes && attributes.type === 'picture') {
+  } else if (attributes && (attributes.type === 'picture' || attributes.type === 'picture_svg')) {
     const { type, inlineOrAnchored, ...otherAttributes } = attributes;
     // eslint-disable-next-line no-use-before-define
     const imageFragment = buildDrawing(inlineOrAnchored, type, otherAttributes);
@@ -742,6 +742,326 @@ const computeImageDimensions = (vNode, attributes) => {
   attributes.width = modifiedWidth;
   // eslint-disable-next-line no-param-reassign
   attributes.height = modifiedHeight;
+};
+
+const mathFonts = () => {
+  const mathFragment =  fragment({
+    namespaceAlias: {
+      w: namespaces.w
+    },
+  })
+    .ele('@w', 'rPr')
+    .ele('@w', 'rFonts')
+    .att('@w', 'ascii', 'Cambria Math')
+    .att('@w', 'hAnsi', 'Cambria Math')
+    .up()
+    .up();
+
+  return mathFragment;
+};
+
+const m_rPr = () => {
+  const mathFragment =  fragment({
+    namespaceAlias: {
+      m: namespaces.m
+    },
+  })
+    .ele('@m', 'rPr')
+    .ele('@m', 'sty')
+    .att('@m', 'val', 'p')
+    .up()
+    .up();
+
+  return mathFragment;
+};
+
+const ctrlPr = () => {
+  const mathFragment =  fragment({
+    namespaceAlias: {
+      m: namespaces.m
+    },
+  })
+    .ele('@m', 'ctrlPr');
+
+  mathFragment.import(mathFonts());
+  mathFragment
+    .up();
+
+  return mathFragment;
+};
+
+const fPr = () => {
+  const mathFragment =  fragment({
+    namespaceAlias: {
+      m: namespaces.m
+    },
+  })
+    .ele('@m', 'fPr');
+
+  mathFragment.import(ctrlPr());
+  mathFragment
+    .up();
+
+  return mathFragment;
+};
+
+const sSupPr = () => {
+  const mathFragment =  fragment({
+    namespaceAlias: {
+      m: namespaces.m
+    },
+  })
+    .ele('@m', 'sSupPr');
+  mathFragment.import(ctrlPr());
+
+  mathFragment
+    .up();
+  return mathFragment;
+};
+
+const buildMathTextElement = (text) => {
+  const textFragment = fragment({
+    namespaceAlias: { m: namespaces.m },
+  })
+    .ele('@m', 't')
+    .txt(text)
+    .up();
+
+  return textFragment;
+};
+
+const build_mr = (vNode, isSet_m_rPr = false) => {
+  const mf_r = fragment({
+    namespaceAlias: { m: namespaces.m },
+  })
+    .ele('@m', 'r');
+  if (isSet_m_rPr) {
+    mf_r.import(m_rPr());
+  }
+
+  mf_r.import(mathFonts());
+
+  let child1;
+  if (vNode.children.length) {
+    for (let i = 0; i < vNode.children.length; i++) {
+      if (isVText(vNode.children[i])) {
+        child1 = buildMathTextElement(vNode.children[i].text);
+      } else {
+        console.log('!!! Not Is text => ', vNode.children[i])
+      }
+    }
+  }
+
+  mf_r.import(child1);
+
+  mf_r.up();
+
+  return mf_r;
+};
+
+
+
+const buildChildMath = (vNode, isSet_m_rPr = false) => {
+  let mathFragment;
+
+  switch (vNode.tagName) {
+    case 'mfrac':
+      mathFragment = fragment({
+        namespaceAlias: { m: namespaces.m },
+      })
+        .ele('@m', 'f');
+
+      const fPrFragment = fPr();
+      mathFragment.import(fPrFragment);
+
+      const m_f_num = fragment({
+        namespaceAlias: { m: namespaces.m },
+      })
+        .ele('@m', 'num');
+
+      //num
+      if (vNode.children.length) {
+        if (vNode.children.length === 2) {
+          const vNode1 = vNode.children[0];
+          if (vNode1.tagName === 'mrow' && vNode1.children.length) {
+            for (let i = 0; i < vNode1.children.length; i++) {
+              const childFragment = buildChildMath(vNode1.children[i]);
+              m_f_num.import(childFragment);
+            }
+          } else {
+            const childFragment = buildChildMath(vNode1);
+            m_f_num.import(childFragment);
+          }
+
+          m_f_num.up();
+          mathFragment.import(m_f_num);
+
+          const vNode2 = vNode.children[1];
+
+          const m_f_den = fragment({
+            namespaceAlias: { m: namespaces.m },
+          })
+            .ele('@m', 'den');
+
+          if (vNode2.tagName === 'mrow' && vNode2.children.length) {
+            for (let i = 0; i < vNode2.children.length; i++) {
+              const childFragment = buildChildMath(vNode2.children[i]);
+              m_f_den.import(childFragment);
+            }
+          } else {
+            const childFragment = buildChildMath(vNode2);
+            m_f_den.import(childFragment);
+          }
+
+          m_f_den.up();
+          mathFragment.import(m_f_den);
+          mathFragment.up();
+        }
+      }
+
+      break;
+    case 'mrow':
+      mathFragment = fragment({
+        namespaceAlias: { m: namespaces.m },
+      })
+        .ele('@m', 'num');
+      break;
+    case 'mo':
+      mathFragment = build_mr(vNode);
+      break;
+    case 'mn':
+      if (vNode.children.length) {
+        for (let i = 0; i < vNode.children.length; i++) {
+          if (isVText(vNode.children[i])) {
+            mathFragment = buildMathTextElement(vNode.children[i].text);
+          } else {
+            console.log('!!! Not Is text => ', vNode.children[i])
+          }
+        }
+      }
+      break;
+    case 'mi':
+      mathFragment = build_mr(vNode, isSet_m_rPr);
+
+      break;
+    case 'msup':
+      mathFragment = fragment({
+        namespaceAlias: { m: namespaces.m },
+      })
+        .ele('@m', 'sSup');
+      const sSupPrFragment = sSupPr();
+      mathFragment.import(sSupPrFragment);
+
+      if (vNode.children.length) {
+        if (vNode.children.length === 2) {
+
+          // ---  e_vNode ----
+          const e_vNode = vNode.children[0];
+          const mf_e = fragment({
+            namespaceAlias: { m: namespaces.m },
+          })
+            .ele('@m', 'e');
+
+          const mf_e_r = buildChildMath(e_vNode, true);
+
+
+          mf_e.import(mf_e_r);
+          mf_e.up();
+
+          mathFragment.import(mf_e);
+
+
+          // ---  sup_vNode ----
+
+          const mf_sup = fragment({
+            namespaceAlias: { m: namespaces.m },
+          })
+            .ele('@m', 'sup');
+
+          const mf_sup_r = fragment({
+            namespaceAlias: { m: namespaces.m },
+          })
+            .ele('@m', 'r');
+          mf_sup_r.import(mathFonts());
+
+          const sup_vNode = vNode.children[1].tagName === 'mrow'
+            ? vNode.children[1].children[0]
+            : vNode.children[1];
+
+          const child2 = buildChildMath(sup_vNode);
+          mf_sup_r.import(child2);
+
+          mf_sup_r.up();
+
+          mf_sup.import(mf_sup_r);
+          mf_sup.up();
+
+          mathFragment.import(mf_sup);
+
+        }
+      }
+
+      mathFragment.up();
+      break;
+  }
+
+  if (!mathFragment) {
+    return null
+  }
+
+  if (vNode.tagName === 'mi' || vNode.tagName === 'mn'
+    || vNode.tagName === 'msup'
+    || vNode.tagName === 'mfrac'
+  ) {
+    return mathFragment;
+  }
+
+  if (isVNode(vNode) && vNode.children && Array.isArray(vNode.children) && vNode.children.length) {
+    for (let i = 0; i < vNode.children.length; i++) {
+      const childFragment = buildChildMath(vNode.children[i]);
+      if (childFragment) {
+        mathFragment.import(childFragment);
+      }
+    }
+  }
+
+  mathFragment.up();
+  return mathFragment;
+
+};
+
+const buildMath = (vNode, attributes, docxDocumentInstanc) => {
+  const mathFragment = fragment({
+    namespaceAlias: { m: namespaces.m },
+  })
+    .ele('@m', 'oMath');
+
+  if (isVNode(vNode) && vNode.children && Array.isArray(vNode.children) && vNode.children.length) {
+    for (let i = 0; i < vNode.children.length; i++) {
+      const childFragment = buildChildMath(vNode.children[i]);
+      if (childFragment) {
+        mathFragment.import(childFragment);
+      }
+    }
+  }
+
+  mathFragment.up();
+  return mathFragment;
+};
+
+const buildMathPara = (vNode, attributes, docxDocumentInstanc) => {
+  const mathFragment = fragment({
+    namespaceAlias: { m: namespaces.m },
+  })
+    .ele('@m', 'oMathPara');
+
+  const math = buildMath(vNode, attributes, docxDocumentInstanc);
+
+  mathFragment.import(math);
+
+
+  mathFragment.up();
+  return mathFragment;
 };
 
 const buildParagraph = (vNode, attributes, docxDocumentInstance) => {
@@ -1660,6 +1980,112 @@ const buildBinaryLargeImageOrPicture = (relationshipId) => {
   return binaryLargeImageOrPictureFragment;
 };
 
+const build_useLocalDpi = ( ) => {
+  const extLstFragment = fragment({
+    namespaceAlias: { a14: namespaces.a14 },
+  })
+    .ele('@a14', 'useLocalDpi')
+    // .att('@a14', 'xmlns', "http://schemas.microsoft.com/office/drawing/2010/main")
+    .att('xmlns', "")
+    .att('val', "0")
+  ;
+
+  extLstFragment.up();
+
+  return extLstFragment;
+};
+
+const build_svgBlip = (rId_svg) => {
+  const svgBlipFragment = fragment({
+      namespaceAlias: {
+        asvg: namespaces.asvg,
+        r: namespaces.r
+      },
+    })
+      .ele('@asvg', 'svgBlip')
+      // .att('@asvg', 'xmlns', "http://schemas.microsoft.com/office/drawing/2016/SVG/main")
+    .att('xmlns', "")
+    .att('@r', 'embed', `rId${rId_svg}`)
+  ;
+
+  svgBlipFragment.up();
+
+  return svgBlipFragment;
+};
+
+const build_ext = (rId_svg = '') => {
+  const extFragment = fragment({
+    namespaceAlias: { a: namespaces.a },
+  })
+    .ele('@a', 'ext')
+    .att('uri', "")  ;
+  let childFragment;
+
+  if (!rId_svg) {
+    childFragment = build_useLocalDpi();
+  } else {
+    childFragment = build_svgBlip(rId_svg);
+  }
+  extFragment.import(childFragment);
+
+  extFragment.up();
+  return extFragment;
+};
+
+const build_extLst = (rId_svg) => {
+  const extLstFragment = fragment({
+    namespaceAlias: { a: namespaces.a },
+  })
+    .ele('@a', 'extLst');
+
+  let extFragment = build_ext();
+  extLstFragment.import(extFragment);
+
+  extFragment = build_ext(rId_svg);
+  extLstFragment.import(extFragment);
+
+  extLstFragment.up();
+  return extLstFragment;
+};
+
+const buildBinaryLargeImageOrPictureSvg = (relationshipId, relationshipId_png, relationshipId_svg) => {
+  const binaryLargeImageOrPictureFragment = fragment({
+    namespaceAlias: { a: namespaces.a, r: namespaces.r },
+  })
+    .ele('@a', 'blip')
+    .att('@r', 'embed', `rId${relationshipId}`)
+    // FIXME: possible values 'email', 'none', 'print', 'hqprint', 'screen'
+    .att('cstate', 'print');
+
+  //
+  const build_extLstFragment = build_extLst(relationshipId_svg);
+  binaryLargeImageOrPictureFragment.import(build_extLstFragment);
+
+  binaryLargeImageOrPictureFragment.up();
+
+  return binaryLargeImageOrPictureFragment;
+};
+
+//buildBinaryLargeImageOrPictureSvgFill
+const buildBinaryLargeImageOrPictureSvgFill = (relationshipId, relationshipId_png, relationshipId_svg) => {
+  const binaryLargeImageOrPictureFillFragment = fragment({
+    namespaceAlias: { pic: namespaces.pic },
+  }).ele('@pic', 'blipFill');
+
+  const binaryLargeImageOrPictureFragment = buildBinaryLargeImageOrPictureSvg(relationshipId, relationshipId_png, relationshipId_svg);
+  binaryLargeImageOrPictureFillFragment.import(binaryLargeImageOrPictureFragment);
+
+
+  const srcRectFragment = buildSrcRectFragment();
+  binaryLargeImageOrPictureFillFragment.import(srcRectFragment);
+  const stretchFragment = buildStretch();
+  binaryLargeImageOrPictureFillFragment.import(stretchFragment);
+
+  binaryLargeImageOrPictureFillFragment.up();
+
+  return binaryLargeImageOrPictureFillFragment;
+};
+
 const buildBinaryLargeImageOrPictureFill = (relationshipId) => {
   const binaryLargeImageOrPictureFillFragment = fragment({
     namespaceAlias: { pic: namespaces.pic },
@@ -1726,6 +2152,35 @@ const buildNonVisualPictureProperties = (
   return nonVisualPicturePropertiesFragment;
 };
 
+//buildPictureSvg
+const buildPictureSvg = ({
+  id,
+  fileNameWithExtension,
+  description,
+  relationshipId,
+  relationshipId_png,
+  relationshipId_svg,
+  width,
+  height,
+                      }) => {
+  const pictureFragment = fragment({
+    namespaceAlias: { pic: namespaces.pic },
+  }).ele('@pic', 'pic');
+  const nonVisualPicturePropertiesFragment = buildNonVisualPictureProperties(
+    id,
+    fileNameWithExtension,
+    description
+  );
+  pictureFragment.import(nonVisualPicturePropertiesFragment);
+  const binaryLargeImageOrPictureFill = buildBinaryLargeImageOrPictureSvgFill(relationshipId, relationshipId_png, relationshipId_svg);
+  pictureFragment.import(binaryLargeImageOrPictureFill);
+  const shapeProperties = buildShapeProperties({ width, height });
+  pictureFragment.import(shapeProperties);
+  pictureFragment.up();
+
+  return pictureFragment;
+};
+
 const buildPicture = ({
   id,
   fileNameWithExtension,
@@ -1760,6 +2215,10 @@ const buildGraphicData = (graphicType, attributes) => {
     .att('uri', 'http://schemas.openxmlformats.org/drawingml/2006/picture');
   if (graphicType === 'picture') {
     const pictureFragment = buildPicture(attributes);
+    graphicDataFragment.import(pictureFragment);
+  }
+  if (graphicType === 'picture_svg') {
+    const pictureFragment = buildPictureSvg(attributes);
     graphicDataFragment.import(pictureFragment);
   }
   graphicDataFragment.up();
@@ -1966,6 +2425,7 @@ const buildDrawing = (inlineOrAnchored = false, graphicType, attributes) => {
 
 export {
   buildParagraph,
+  buildMathPara,
   buildTable,
   buildNumberingInstances,
   buildLineBreak,

@@ -12,6 +12,7 @@ const namespaces = {
   ve: 'http://schemas.openxmlformats.org/markup-compatibility/2006',
   vt: 'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes',
   w: 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+  m: 'http://schemas.openxmlformats.org/officeDocument/2006/math',
   w10: 'urn:schemas-microsoft-com:office:word',
   wp: 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
   wne: 'http://schemas.microsoft.com/office/word/2006/wordml',
@@ -31,6 +32,8 @@ const namespaces = {
   webSettingsRelation:
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings',
   sl: 'http://schemas.openxmlformats.org/schemaLibrary/2006/main',
+  a14: "http://schemas.microsoft.com/office/drawing/2010/main",
+  asvg: "http://schemas.microsoft.com/office/drawing/2016/SVG/main"
 };
 
 export default namespaces;

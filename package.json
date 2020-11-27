@@ -58,6 +58,8 @@
     "standard-version": "^8.0.0"
   },
   "dependencies": {
+    "canvas": "^2.6.1",
+    "canvg": "^3.0.7",
     "color-name": "^1.1.4",
     "escape-html": "^1.0.3",
     "html-minifier": "^4.0.0",
@@ -71,18 +73,5 @@
     "commitizen": {
       "path": "cz-conventional-changelog"
     }
-  },
-  "husky": {
-    "hooks": {
-      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS",
-      "pre-commit": "lint-staged"
-    }
-  },
-  "lint-staged": {
-    "src/**/*.js": [
-      "prettier --write",
-      "eslint --fix",
-      "git add"
-    ]
   }
 }
